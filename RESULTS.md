@@ -1,125 +1,100 @@
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 1
-Nevtroni: 1000000
-Absorbirani: 541980 (54.20 %)
-Odbiti: 441437 (44.14 %)
-Prepusceni: 16583 (1.66 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 1.118940 s
+mpirun -np 1 python3 main.py --neutrons 10000000
+mpirun -np 1 python3 main_numba.py --neutrons 10000000
 
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 1
-Nevtroni: 1000000
-Absorbirani: 541980 (54.20 %)
-Odbiti: 441437 (44.14 %)
-Prepusceni: 16583 (1.66 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 1.129532 s
+mpirun -np 2 python3 main.py --neutrons 10000000
+mpirun -np 2 python3 main_numba.py --neutrons 10000000
+
+mpirun -np 4 python3 main.py --neutrons 10000000
+mpirun -np 4 python3 main_numba.py --neutrons 10000000
+
+mpirun -np 8 python3 main.py --neutrons 10000000
+mpirun -np 8 python3 main_numba.py --neutrons 10000000
+
 
 Simulacija transporta nevtronov
 -------------------------------
 MPI procesi: 1
-Nevtroni: 1000000
-Absorbirani: 541980 (54.20 %)
-Odbiti: 441437 (44.14 %)
-Prepusceni: 16583 (1.66 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 1.115959 s
+Nevtroni: 10000000
+Absorbirani: 6198135 (61.98 %)
+Odbiti: 3750495 (37.50 %)
+Prepusceni: 51370 (0.51 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 17.765934 s
 
-
-
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 2
-Nevtroni: 1000000
-Absorbirani: 542184 (54.22 %)
-Odbiti: 441138 (44.11 %)
-Prepusceni: 16678 (1.67 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.580820 s
-
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 2
-Nevtroni: 1000000
-Absorbirani: 542184 (54.22 %)
-Odbiti: 441138 (44.11 %)
-Prepusceni: 16678 (1.67 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.591313 s
+Simulacija transporta nevtronov - Numba
+---------------------------------------
+MPI procesi: 1
+Nevtroni: 10000000
+Absorbirani: 6196340 (61.96 %)
+Odbiti: 3752213 (37.52 %)
+Prepusceni: 51447 (0.51 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 0.922659 s
 
 Simulacija transporta nevtronov
 -------------------------------
 MPI procesi: 2
-Nevtroni: 1000000
-Absorbirani: 542184 (54.22 %)
-Odbiti: 441138 (44.11 %)
-Prepusceni: 16678 (1.67 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.585299 s
+Nevtroni: 10000000
+Absorbirani: 6197110 (61.97 %)
+Odbiti: 3751301 (37.51 %)
+Prepusceni: 51589 (0.52 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 9.048578 s
 
-
-
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 4
-Nevtroni: 1000000
-Absorbirani: 542899 (54.29 %)
-Odbiti: 440380 (44.04 %)
-Prepusceni: 16721 (1.67 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.307722 s
-
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 4
-Nevtroni: 1000000
-Absorbirani: 542899 (54.29 %)
-Odbiti: 440380 (44.04 %)
-Prepusceni: 16721 (1.67 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.303942 s
+Simulacija transporta nevtronov - Numba
+---------------------------------------
+MPI procesi: 2
+Nevtroni: 10000000
+Absorbirani: 6199323 (61.99 %)
+Odbiti: 3749127 (37.49 %)
+Prepusceni: 51550 (0.52 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 0.476522 s
 
 Simulacija transporta nevtronov
 -------------------------------
 MPI procesi: 4
-Nevtroni: 1000000
-Absorbirani: 542899 (54.29 %)
-Odbiti: 440380 (44.04 %)
-Prepusceni: 16721 (1.67 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.310332 s
+Nevtroni: 10000000
+Absorbirani: 6198547 (61.99 %)
+Odbiti: 3749734 (37.50 %)
+Prepusceni: 51719 (0.52 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 5.722684 s
 
-
-
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 8
-Nevtroni: 1000000
-Absorbirani: 542075 (54.21 %)
-Odbiti: 441304 (44.13 %)
-Prepusceni: 16621 (1.66 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.206973 s
-
-Simulacija transporta nevtronov
--------------------------------
-MPI procesi: 8
-Nevtroni: 1000000
-Absorbirani: 542075 (54.21 %)
-Odbiti: 441304 (44.13 %)
-Prepusceni: 16621 (1.66 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.205236 s
+Simulacija transporta nevtronov - Numba
+---------------------------------------
+MPI procesi: 4
+Nevtroni: 10000000
+Absorbirani: 6196532 (61.97 %)
+Odbiti: 3751526 (37.52 %)
+Prepusceni: 51942 (0.52 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 0.295930 s
 
 Simulacija transporta nevtronov
 -------------------------------
 MPI procesi: 8
-Nevtroni: 1000000
-Absorbirani: 542075 (54.21 %)
-Odbiti: 441304 (44.13 %)
-Prepusceni: 16621 (1.66 %)
-Povprecno korakov: 4.07
-Cas izvajanja: 0.207340 s
+Nevtroni: 10000000
+Absorbirani: 6198435 (61.98 %)
+Odbiti: 3749827 (37.50 %)
+Prepusceni: 51738 (0.52 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 3.757964 s
+
+Simulacija transporta nevtronov - Numba
+---------------------------------------
+MPI procesi: 8
+Nevtroni: 10000000
+Absorbirani: 6196180 (61.96 %)
+Odbiti: 3751379 (37.51 %)
+Prepusceni: 52441 (0.52 %)
+Povprecno korakov: 4.51
+Povprecen |y|: 1.17
+Cas izvajanja: 0.188110 s

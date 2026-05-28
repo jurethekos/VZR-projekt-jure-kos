@@ -1,12 +1,13 @@
 import argparse
 import math
-import random
 
+import numpy as np
 from mpi4py import MPI
+from numba import njit
 
 
-# run simulation: mpirun -np X python3 main.py --neutrons Y
-# example: mpirun -np 8 python3 main.py --neutrons 1000000
+# run simulation: mpirun -np X python3 main_numba.py --neutrons Y
+# example: mpirun -np 8 python3 main_numba.py --neutrons 1000000
 
 THICKNESS = 10.0
 ABSORPTION_PROB = 0.15
@@ -24,44 +25,15 @@ def read_arguments():
 def split_work(total_neutrons, rank, size):
     local_neutrons = total_neutrons // size
 
-    # First few processes get one extra neutron if division is not exact.
     if rank < total_neutrons % size:
         local_neutrons += 1
 
     return local_neutrons
 
 
-def simulate_one_neutron(rng):
-    x = 0.0
-    y = 0.0
-    angle = 0.0
-
-    for step in range(MAX_STEPS):
-        free_path = rng.expovariate(1.0 / SCATTER_MEAN)
-        x += math.cos(angle) * free_path
-        y += math.sin(angle) * free_path
-
-        if x < 0:
-            return "reflected", step + 1, abs(y)
-
-        if x >= THICKNESS:
-            return "transmitted", step + 1, abs(y)
-
-        if rng.random() < ABSORPTION_PROB:
-            return "absorbed", step + 1, abs(y)
-
-        # After scattering, the neutron gets a new random 2D direction.
-        # x decides reflected/transmitted, y only describes sideways movement.
-        angle = rng.random() * 2.0 * math.pi
-
-    # Safety fallback, so a neutron cannot run forever.
-    if x < THICKNESS / 2:
-        return "reflected", MAX_STEPS, abs(y)
-    return "transmitted", MAX_STEPS, abs(y)
-
-
-def simulate_neutrons(local_neutrons, seed):
-    rng = random.Random(seed)
+@njit
+def simulate_neutrons_numba(local_neutrons, seed):
+    np.random.seed(seed)
 
     absorbed = 0
     reflected = 0
@@ -70,13 +42,47 @@ def simulate_neutrons(local_neutrons, seed):
     total_abs_y = 0.0
 
     for _ in range(local_neutrons):
-        result, steps, abs_y = simulate_one_neutron(rng)
-        total_steps += steps
-        total_abs_y += abs_y
+        x = 0.0
+        y = 0.0
+        angle = 0.0
 
-        if result == "absorbed":
+        result = 2
+        steps = MAX_STEPS
+
+        for step in range(MAX_STEPS):
+            free_path = np.random.exponential(SCATTER_MEAN)
+            x += math.cos(angle) * free_path
+            y += math.sin(angle) * free_path
+
+            if x < 0.0:
+                result = 1
+                steps = step + 1
+                break
+
+            if x >= THICKNESS:
+                result = 2
+                steps = step + 1
+                break
+
+            if np.random.random() < ABSORPTION_PROB:
+                result = 0
+                steps = step + 1
+                break
+
+            angle = np.random.random() * 2.0 * math.pi
+
+        if steps == MAX_STEPS:
+            if x < THICKNESS / 2.0:
+                result = 1
+            else:
+                result = 2
+
+        total_steps += steps
+        total_abs_y += abs(y)
+
+        if result == 0:
             absorbed += 1
-        elif result == "reflected":
+        elif result == 1:
             reflected += 1
         else:
             transmitted += 1
@@ -99,14 +105,15 @@ def main():
 
     total_neutrons = args.neutrons
     local_neutrons = split_work(total_neutrons, rank, size)
-
-    # Different seed for each process, but still deterministic.
     seed = SEED + rank * 1000
+
+    # Warm-up call compiles the Numba function before timing starts.
+    simulate_neutrons_numba(1, seed)
 
     comm.Barrier()
     start_time = MPI.Wtime()
 
-    local_absorbed, local_reflected, local_transmitted, local_steps, local_abs_y = simulate_neutrons(
+    local_absorbed, local_reflected, local_transmitted, local_steps, local_abs_y = simulate_neutrons_numba(
         local_neutrons,
         seed,
     )
@@ -125,8 +132,8 @@ def main():
         average_steps = total_steps / total_neutrons if total_neutrons > 0 else 0
         average_abs_y = total_abs_y / total_neutrons if total_neutrons > 0 else 0
 
-        print("Simulacija transporta nevtronov")
-        print("-------------------------------")
+        print("Simulacija transporta nevtronov - Numba")
+        print("---------------------------------------")
         print(f"MPI procesi: {size}")
         print(f"Nevtroni: {total_neutrons}")
         print(f"Absorbirani: {absorbed} ({percent(absorbed, total_neutrons):.2f} %)")

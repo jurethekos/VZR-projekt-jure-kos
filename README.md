@@ -1,49 +1,84 @@
-## Rezultati meritev
+# Simulacija transporta nevtronov
 
-Meritve so bile izvedene za 1, 2, 4 in 8 MPI procesov. Za vsako konfiguracijo so bili izvedeni 3 zagoni, izračunano pa je povprečje časa izvajanja.
+Projekt vsebuje poenostavljeno Monte Carlo simulacijo transporta nevtronov skozi materialno plast. Simulacija je narejena v Pythonu z `mpi4py`, dodatno pa je pripravljena še verzija z `numba`, da se lahko primerja navadna Python izvedba in JIT prevedena izvedba.
 
-Povprečni časi izvajanja:
+## Opis modela
 
-- 1 proces: 1.121 s
-- 2 procesa: 0.586 s
-- 4 procesi: 0.307 s
-- 8 procesov: 0.207 s
+Vsak nevtron začne v točki `(x, y) = (0, 0)`. Debelina materiala je določena v smeri `x`, smer `y` pa predstavlja stranski odmik nevtrona.
 
-Izračun pospeška:
+Pri vsakem koraku se naključno določi dolžina proste poti. Nevtron se premakne v trenutni smeri, nato se preveri:
 
+- če je `x < 0`, je nevtron odbit,
+- če je `x >= debelina`, je nevtron prepuščen,
+- sicer se lahko absorbira,
+- če se ne absorbira, se po sipanju izbere nov naključen kot gibanja v 2D.
+
+Program meri tudi povprečen `|y|`, kar pokaže stranski odmik nevtronov pri koncu simulacije.
+
+## Datoteke
+
+- `main.py` - osnovna Python + MPI verzija
+- `main_numba.py` - MPI verzija, kjer je glavna simulacijska zanka pospešena z `numba`
+- `RESULTS.md` - surovi rezultati zagonov
+- `simulacija-transporta-nevtronov-numba.pptx` - predstavitev rezultatov
+
+## Namestitev
+
+Na macOS je najprej potreben Open MPI:
+
+```bash
+brew install open-mpi
+```
+
+Python paketi:
+
+```bash
+pip install mpi4py numba numpy
+```
+
+## Zagon
+
+Osnovna verzija:
+
+```bash
+mpirun -np 4 python3 main.py --neutrons 10000000
+```
+
+Numba verzija:
+
+```bash
+mpirun -np 4 python3 main_numba.py --neutrons 10000000
+```
+
+Število procesov se določi z `-np`, število nevtronov pa z argumentom `--neutrons`.
+
+## Izračun pohitritve
+
+Pohitritev:
+
+```text
 S(p) = T(1) / T(p)
+```
 
-Izračun Karp-Flatt metrike:
+Karp-Flatt metrika:
 
+```text
 e = ((1 / S(p)) - (1 / p)) / (1 - (1 / p))
+```
 
-Izračunani rezultati:
+## Povzetek rezultatov
 
-- 1 proces:
-  - speedup = 1.00
-  - Karp-Flatt e = 0.000
+Meritve so bile izvedene z `10000000` nevtroni.
 
-- 2 procesa:
-  - speedup = 1.91
-  - Karp-Flatt e = 0.048
+| Procesi | Čas brez Numbe [s] | Čas Numba [s] | S brez Numbe | e brez Numbe | S Numba | e Numba |
+|--------:|-------------------:|--------------:|-------------:|-------------:|--------:|--------:|
+| 1       | 17.766             | 0.923         | 1.00         | 0.000        | 1.00    | 0.000   |
+| 2       | 9.049              | 0.477         | 1.96         | 0.019        | 1.94    | 0.033   |
+| 4       | 5.723              | 0.296         | 3.10         | 0.096        | 3.12    | 0.094   |
+| 8       | 3.758              | 0.188         | 4.73         | 0.099        | 4.91    | 0.090   |
 
-- 4 procesi:
-  - speedup = 3.65
-  - Karp-Flatt e = 0.032
+## Interpretacija
 
-- 8 procesov:
-  - speedup = 5.41
-  - Karp-Flatt e = 0.068
+Z večanjem števila MPI procesov se čas izvajanja zmanjša pri obeh verzijah. Pohitritev ni popolnoma linearna, ker obstajajo režija zagona procesov, sinhronizacija in operacije `MPI_Reduce`.
 
-
-### Interpretacija rezultatov
-
-Rezultati kažejo, da se čas izvajanja zmanjšuje s povečevanjem števila MPI procesov. Pospešek je relativno blizu idealnemu linearnemu pospešku, vendar zaradi MPI overheada ni popolnoma linearen.
-
-Pri večjem številu procesov se pojavi dodaten overhead zaradi ustvarjanja procesov, sinhronizacije in izvajanja operacije MPI_Reduce. Zaradi tega se učinkovitost programa z večanjem števila procesov nekoliko zmanjša.
-
-Na rezultate vpliva tudi operacijski sistem, saj procesi tekmujejo za procesorski čas in druge sistemske vire. Prisotna so tudi manjša odstopanja zaradi naključne narave Monte Carlo simulacije.
-
-Karp-Flattova metrika ostaja relativno nizka, kar pomeni, da je sekvenčni del programa majhen in da je problem primeren za paralelizacijo.
-
-V tem problemu ni večjih težav z neenakomerno porazdelitvijo dela, saj vsak proces obdeluje približno enako število nevtronov. Zaradi tega je komunikacijskega overheada malo in program dobro skalira tudi pri večjem številu procesov.
+Numba bistveno zmanjša absolutni čas izvajanja simulacije, ker je notranja zanka Monte Carlo simulacije prevedena. Pri tem pa MPI skaliranje ostane podobno: Numba pospeši računanje znotraj posameznega procesa, ne odstrani pa režije paralelnega izvajanja.
