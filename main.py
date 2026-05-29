@@ -1,18 +1,18 @@
 import argparse
-import math
-import random
 
+import numpy as np
 from mpi4py import MPI
 
 
 # run simulation: mpirun -np X python3 main.py --neutrons Y
-# example: mpirun -np 8 python3 main.py --neutrons 1000000
+# example: mpirun -np 8 python3 main.py --neutrons 10000000
 
 THICKNESS = 10.0
 ABSORPTION_PROB = 0.15
 SCATTER_MEAN = 1.0
 MAX_STEPS = 10000
 SEED = 42
+BATCH_SIZE = 250000
 
 
 def read_arguments():
@@ -24,44 +24,86 @@ def read_arguments():
 def split_work(total_neutrons, rank, size):
     local_neutrons = total_neutrons // size
 
-    # First few processes get one extra neutron if division is not exact.
     if rank < total_neutrons % size:
         local_neutrons += 1
 
     return local_neutrons
 
 
-def simulate_one_neutron(rng):
-    x = 0.0
-    y = 0.0
-    angle = 0.0
+def simulate_batch(batch_size, rng):
+    x = np.zeros(batch_size)
+    y = np.zeros(batch_size)
+    angle = np.zeros(batch_size)
+    steps = np.zeros(batch_size, dtype=np.int64)
+    active = np.ones(batch_size, dtype=bool)
 
-    for step in range(MAX_STEPS):
-        free_path = rng.expovariate(1.0 / SCATTER_MEAN)
-        x += math.cos(angle) * free_path
-        y += math.sin(angle) * free_path
+    absorbed = 0
+    reflected = 0
+    transmitted = 0
+    total_abs_y = 0.0
 
-        if x < 0:
-            return "reflected", step + 1, abs(y)
+    for _ in range(MAX_STEPS):
+        active_indices = np.flatnonzero(active)
+        active_count = active_indices.size
 
-        if x >= THICKNESS:
-            return "transmitted", step + 1, abs(y)
+        if active_count == 0:
+            break
 
-        if rng.random() < ABSORPTION_PROB:
-            return "absorbed", step + 1, abs(y)
+        steps[active_indices] += 1
 
-        # After scattering, the neutron gets a new random 2D direction.
-        # x decides reflected/transmitted, y only describes sideways movement.
-        angle = rng.random() * 2.0 * math.pi
+        free_path = rng.exponential(SCATTER_MEAN, active_count)
+        active_angle = angle[active_indices]
 
-    # Safety fallback, so a neutron cannot run forever.
-    if x < THICKNESS / 2:
-        return "reflected", MAX_STEPS, abs(y)
-    return "transmitted", MAX_STEPS, abs(y)
+        x[active_indices] += np.cos(active_angle) * free_path
+        y[active_indices] += np.sin(active_angle) * free_path
+
+        reflected_mask = x[active_indices] < 0.0
+        transmitted_mask = x[active_indices] >= THICKNESS
+        inside_mask = ~(reflected_mask | transmitted_mask)
+
+        reflected_indices = active_indices[reflected_mask]
+        transmitted_indices = active_indices[transmitted_mask]
+        inside_indices = active_indices[inside_mask]
+
+        if reflected_indices.size > 0:
+            reflected += reflected_indices.size
+            total_abs_y += np.abs(y[reflected_indices]).sum()
+            active[reflected_indices] = False
+
+        if transmitted_indices.size > 0:
+            transmitted += transmitted_indices.size
+            total_abs_y += np.abs(y[transmitted_indices]).sum()
+            active[transmitted_indices] = False
+
+        if inside_indices.size > 0:
+            absorption_mask = rng.random(inside_indices.size) < ABSORPTION_PROB
+            absorbed_indices = inside_indices[absorption_mask]
+            scattered_indices = inside_indices[~absorption_mask]
+
+            if absorbed_indices.size > 0:
+                absorbed += absorbed_indices.size
+                total_abs_y += np.abs(y[absorbed_indices]).sum()
+                active[absorbed_indices] = False
+
+            if scattered_indices.size > 0:
+                angle[scattered_indices] = rng.random(scattered_indices.size) * 2.0 * np.pi
+
+    # Safety fallback for rare particles that reached MAX_STEPS.
+    active_indices = np.flatnonzero(active)
+    if active_indices.size > 0:
+        fallback_reflected = active_indices[x[active_indices] < THICKNESS / 2.0]
+        fallback_transmitted = active_indices[x[active_indices] >= THICKNESS / 2.0]
+
+        reflected += fallback_reflected.size
+        transmitted += fallback_transmitted.size
+        total_abs_y += np.abs(y[active_indices]).sum()
+
+    total_steps = int(steps.sum())
+    return absorbed, reflected, transmitted, total_steps, total_abs_y
 
 
 def simulate_neutrons(local_neutrons, seed):
-    rng = random.Random(seed)
+    rng = np.random.default_rng(seed)
 
     absorbed = 0
     reflected = 0
@@ -69,17 +111,21 @@ def simulate_neutrons(local_neutrons, seed):
     total_steps = 0
     total_abs_y = 0.0
 
-    for _ in range(local_neutrons):
-        result, steps, abs_y = simulate_one_neutron(rng)
-        total_steps += steps
-        total_abs_y += abs_y
+    remaining = local_neutrons
+    while remaining > 0:
+        batch_size = min(BATCH_SIZE, remaining)
+        batch_absorbed, batch_reflected, batch_transmitted, batch_steps, batch_abs_y = simulate_batch(
+            batch_size,
+            rng,
+        )
 
-        if result == "absorbed":
-            absorbed += 1
-        elif result == "reflected":
-            reflected += 1
-        else:
-            transmitted += 1
+        absorbed += batch_absorbed
+        reflected += batch_reflected
+        transmitted += batch_transmitted
+        total_steps += batch_steps
+        total_abs_y += batch_abs_y
+
+        remaining -= batch_size
 
     return absorbed, reflected, transmitted, total_steps, total_abs_y
 
@@ -99,8 +145,6 @@ def main():
 
     total_neutrons = args.neutrons
     local_neutrons = split_work(total_neutrons, rank, size)
-
-    # Different seed for each process, but still deterministic.
     seed = SEED + rank * 1000
 
     comm.Barrier()
@@ -125,8 +169,8 @@ def main():
         average_steps = total_steps / total_neutrons if total_neutrons > 0 else 0
         average_abs_y = total_abs_y / total_neutrons if total_neutrons > 0 else 0
 
-        print("Simulacija transporta nevtronov")
-        print("-------------------------------")
+        print("Simulacija transporta nevtronov - NumPy")
+        print("--------------------------------------")
         print(f"MPI procesi: {size}")
         print(f"Nevtroni: {total_neutrons}")
         print(f"Absorbirani: {absorbed} ({percent(absorbed, total_neutrons):.2f} %)")

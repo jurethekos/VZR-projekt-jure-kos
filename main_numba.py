@@ -1,6 +1,4 @@
 import argparse
-import math
-
 import numpy as np
 from mpi4py import MPI
 from numba import njit
@@ -14,6 +12,7 @@ ABSORPTION_PROB = 0.15
 SCATTER_MEAN = 1.0
 MAX_STEPS = 10000
 SEED = 42
+BATCH_SIZE = 250000
 
 
 def read_arguments():
@@ -32,6 +31,79 @@ def split_work(total_neutrons, rank, size):
 
 
 @njit
+def simulate_batch_numba(batch_size):
+    x = np.zeros(batch_size)
+    y = np.zeros(batch_size)
+    angle = np.zeros(batch_size)
+    steps = np.zeros(batch_size, dtype=np.int64)
+    active = np.ones(batch_size, dtype=np.bool_)
+
+    absorbed = 0
+    reflected = 0
+    transmitted = 0
+    total_abs_y = 0.0
+
+    for _ in range(MAX_STEPS):
+        active_indices = np.flatnonzero(active)
+        active_count = active_indices.size
+
+        if active_count == 0:
+            break
+
+        steps[active_indices] += 1
+
+        free_path = np.random.exponential(SCATTER_MEAN, active_count)
+        active_angle = angle[active_indices]
+
+        x[active_indices] += np.cos(active_angle) * free_path
+        y[active_indices] += np.sin(active_angle) * free_path
+
+        reflected_mask = x[active_indices] < 0.0
+        transmitted_mask = x[active_indices] >= THICKNESS
+        inside_mask = ~(reflected_mask | transmitted_mask)
+
+        reflected_indices = active_indices[reflected_mask]
+        transmitted_indices = active_indices[transmitted_mask]
+        inside_indices = active_indices[inside_mask]
+
+        if reflected_indices.size > 0:
+            reflected += reflected_indices.size
+            total_abs_y += np.abs(y[reflected_indices]).sum()
+            active[reflected_indices] = False
+
+        if transmitted_indices.size > 0:
+            transmitted += transmitted_indices.size
+            total_abs_y += np.abs(y[transmitted_indices]).sum()
+            active[transmitted_indices] = False
+
+        if inside_indices.size > 0:
+            absorption_mask = np.random.random(inside_indices.size) < ABSORPTION_PROB
+            absorbed_indices = inside_indices[absorption_mask]
+            scattered_indices = inside_indices[~absorption_mask]
+
+            if absorbed_indices.size > 0:
+                absorbed += absorbed_indices.size
+                total_abs_y += np.abs(y[absorbed_indices]).sum()
+                active[absorbed_indices] = False
+
+            if scattered_indices.size > 0:
+                angle[scattered_indices] = np.random.random(scattered_indices.size) * 2.0 * np.pi
+
+    active_indices = np.flatnonzero(active)
+    if active_indices.size > 0:
+        fallback_reflected = active_indices[x[active_indices] < THICKNESS / 2.0]
+        fallback_transmitted = active_indices[x[active_indices] >= THICKNESS / 2.0]
+
+        reflected += fallback_reflected.size
+        transmitted += fallback_transmitted.size
+        total_abs_y += np.abs(y[active_indices]).sum()
+
+    total_steps = int(steps.sum())
+
+    return absorbed, reflected, transmitted, total_steps, total_abs_y
+
+
+@njit
 def simulate_neutrons_numba(local_neutrons, seed):
     np.random.seed(seed)
 
@@ -41,51 +113,23 @@ def simulate_neutrons_numba(local_neutrons, seed):
     total_steps = 0
     total_abs_y = 0.0
 
-    for _ in range(local_neutrons):
-        x = 0.0
-        y = 0.0
-        angle = 0.0
+    remaining = local_neutrons
+    while remaining > 0:
+        batch_size = BATCH_SIZE
+        if remaining < BATCH_SIZE:
+            batch_size = remaining
 
-        result = 2
-        steps = MAX_STEPS
+        batch_absorbed, batch_reflected, batch_transmitted, batch_steps, batch_abs_y = simulate_batch_numba(
+            batch_size
+        )
 
-        for step in range(MAX_STEPS):
-            free_path = np.random.exponential(SCATTER_MEAN)
-            x += math.cos(angle) * free_path
-            y += math.sin(angle) * free_path
+        absorbed += batch_absorbed
+        reflected += batch_reflected
+        transmitted += batch_transmitted
+        total_steps += batch_steps
+        total_abs_y += batch_abs_y
 
-            if x < 0.0:
-                result = 1
-                steps = step + 1
-                break
-
-            if x >= THICKNESS:
-                result = 2
-                steps = step + 1
-                break
-
-            if np.random.random() < ABSORPTION_PROB:
-                result = 0
-                steps = step + 1
-                break
-
-            angle = np.random.random() * 2.0 * math.pi
-
-        if steps == MAX_STEPS:
-            if x < THICKNESS / 2.0:
-                result = 1
-            else:
-                result = 2
-
-        total_steps += steps
-        total_abs_y += abs(y)
-
-        if result == 0:
-            absorbed += 1
-        elif result == 1:
-            reflected += 1
-        else:
-            transmitted += 1
+        remaining -= batch_size
 
     return absorbed, reflected, transmitted, total_steps, total_abs_y
 
@@ -132,8 +176,8 @@ def main():
         average_steps = total_steps / total_neutrons if total_neutrons > 0 else 0
         average_abs_y = total_abs_y / total_neutrons if total_neutrons > 0 else 0
 
-        print("Simulacija transporta nevtronov - Numba")
-        print("---------------------------------------")
+        print("Simulacija transporta nevtronov - NumPy + Numba")
+        print("-----------------------------------------------")
         print(f"MPI procesi: {size}")
         print(f"Nevtroni: {total_neutrons}")
         print(f"Absorbirani: {absorbed} ({percent(absorbed, total_neutrons):.2f} %)")
